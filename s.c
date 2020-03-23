@@ -6,14 +6,16 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
-
 #include <sys/sem.h>
+
 #include <signal.h>
+#include <sys/wait.h>
 
 #define FIFONAME_S "server_to_client"
 #define FIFONAME_STATUS "status"
 #define FIFONAME_ESTADO "estado"
 #define FIFONAME_C "client_to_server"
+
 
 struct sembuf p = {0, -1, SEM_UNDO}; // Estrutura que define la operación atomica sem_wait(). 0 significa que se va a operar en el indice 0 del arreglo
 									 // de semáforos. -1 significa que se va a disminuir el contador del semáforo, SEM_UNDO significa que la operación
@@ -21,6 +23,7 @@ struct sembuf p = {0, -1, SEM_UNDO}; // Estrutura que define la operación atomi
 									 // critica, automáticamente se liberar dicho recurso, esto para evitar deadlock (Ver clase 7)
 struct sembuf v = {0, 1, SEM_UNDO}; // Estructura que define la operación atomica sem_post(). Mismo caso que la operación anterior, con la diferencia
 									// que 1 significa que se va a aumentar el contador del semáforo.
+
 
 void welcome(){
     system("clear");
@@ -37,6 +40,7 @@ void welcome(){
     printf("\x1b[33m%s\x1b[0m", "|_____________________________________________________________________________________|\n\n");
 }
 
+
 void wait_semaphore(int semid){
     if(semop(semid, &p, 1) < 0) { // semop realiza una operación sobre un arreglo de semaforos. Recibe la id del arreglo de semaforos,
                                 // el puntero de la operación (en este caso, p, sem_wait()) y la dimensión del arreglo. Se ocupa el recurso.
@@ -50,22 +54,60 @@ void post_semaphore(int semid){
     }
 }
 
-int main(void){
+void clientSend(){
+    int fifo, n;
+    char buf[1024];
 
-    welcome();
+    fifo = open(FIFONAME_C,O_RDWR);
 
-	int n,fifo,fifo_c, fifo_status, len, temp, s_len, fifo_estado;
+    if(fifo < 0){ // Se abre el archivo FIFO con permisos de lectura y escritura. Se guarda su descriptor de archivo (fd)
+		perror("open"); // Si falla, error
+		exit(1);
+	}
+
+    printf("\n Jugador %d va a enviar un mensaje... \n\n", getpid());
+
+
+    if(( n = read(fifo,buf,sizeof(buf)))>0){
+        write(1,buf,n); // Escribe por pantalla los almacenado en buf (escribe n bytes).
+        fflush(stdout);
+    }
+
+    close(fifo);
+    kill(getppid(),SIGALRM);
+}
+
+void serverSend(){
+    int fifo;
+    char buf[1024];
+
+    fifo = open(FIFONAME_S,O_RDWR);
+
+    if(fifo < 0){ // Se abre el archivo FIFO con permisos de lectura y escritura. Se guarda su descriptor de archivo (fd)
+		perror("open"); // Si falla, error
+		exit(1);
+	}
+
+    write(fifo,buf,sizeof(buf));
+    fflush(stdout);
+
+    close(fifo);
+}
+
+int main() 
+{ 
+    pid_t player1, player2; 
+
+    int n,fifo,fifo_c, fifo_status, len, temp, s_len, fifo_estado;
     int semid;
     //char buffer_s[1024];
 	char buf[1024]; // Cadena de char usado para guardar lo que se recibe desde el cliente.
     int status[2];
-    int estado[2];
-    //char client[20];
+    int estado = 0;
 
-    pid_t pid;
+    welcome();
 
-
-	unlink(FIFONAME_STATUS); // Elimina "myfifo" si existe.
+    unlink(FIFONAME_STATUS); // Elimina "myfifo" si existe.
 	unlink(FIFONAME_ESTADO); // Elimina "myfifo" si existe.
 	unlink(FIFONAME_S); // Elimina "myfifo" si existe.
 	unlink(FIFONAME_C); // Elimina "myfifo" si existe.
@@ -91,7 +133,7 @@ int main(void){
 	}
 
     fifo = open(FIFONAME_S,O_RDWR);
-    fifo_c = open(FIFONAME_C,O_RDWR);
+    // fifo_c = open(FIFONAME_C,O_RDWR);
     fifo_status = open(FIFONAME_STATUS,O_RDWR);
     fifo_estado = open(FIFONAME_ESTADO,O_RDWR);
 
@@ -100,10 +142,10 @@ int main(void){
 		exit(1);
 	}
 
-	if(fifo_c < 0){ // Se abre el archivo FIFO con permisos de lectura y escritura. Se guarda su descriptor de archivo (fd)
-		perror("open"); // Si falla, error
-		exit(1);
-	}
+	// if(fifo_c < 0){ // Se abre el archivo FIFO con permisos de lectura y escritura. Se guarda su descriptor de archivo (fd)
+	// 	perror("open"); // Si falla, error
+	// 	exit(1);
+	// }
 
 	if(fifo_status < 0){ // Se abre el archivo FIFO con permisos de lectura y escritura. Se guarda su descriptor de archivo (fd)
 		perror("open"); // Si falla, error
@@ -129,101 +171,107 @@ int main(void){
         perror("semctl"); exit(1); // Si falla, retorna un valor negativo.
     }
 
-    // printf("---------- envio mensaje por defecto ------------ \n\n");
-    // estado[0] = 0;
-    // write(fifo_estado,estado,sizeof(estado));
-
-    // fflush(stdout);
-
-    // close(fifo_estado);
-
-
     printf("\x1b[32m%s\x1b[0m", "Esperando a los jugadores...\n\n");
 
-    while(1) {
+    if((s_len = read(fifo_status, status, sizeof(status))) > 0){
+        player1 = fork(); 
+        if (player1 == 0) { 
+            wait_semaphore(semid);
 
+            printf("\x1b[36m%s\x1b[0m", "Ha ingresado el primer jugador \n \n");
 
-        if((s_len = read(fifo_status, status, sizeof(status))) > 0){
+            printf("child[1] --> pid = %d and ppid = %d\n\n", getpid(), getppid()); 
 
-            printf("mensaje del status: %d \n\n",status[0]);
+            printf("\x1b[32m%s\x1b[0m", "Enviando mapa del primer jugador...\n\n");
 
-            if(status[0] > 0){
-                if(status[0] <= 1){
-                    pid = fork();
+            char mapa[] = "este es el mapa del primer player";
+                            
+            write(fifo,mapa, sizeof(mapa));
 
-                }
-                switch(pid){
-                    case -1:
-                        perror("fork");
-                    break;
-                    case 0:
-                        wait_semaphore(semid);
-                        printf("sem: %d \n",semid);
-                        printf("\x1b[36m%s\x1b[0m", "Entro al hijo... \n \n");
-                        fflush(stdout);
-                        if(( n = read(fifo_c,buf,sizeof(buf)))>0){ // Lee desde la tuberia los mensajes que va escribiendo el cliente, lo almacena en buf y retorna en número de bytes escritos
+            printf("\x1b[34m%s\x1b[0m", "El mapa fue enviado exitosamente al primer jugador! \n \n");
 
-                            write(1,buf,n); // Escribe por pantalla los almacenado en buf (escribe n bytes).
-                            //printf("%s: ",buf);
-                            fflush(stdout);
+            // if(( n = read(fifo_c,buf,sizeof(buf)))>0){
+            //     write(1,buf,n); // Escribe por pantalla los almacenado en buf (escribe n bytes).
+            //     fflush(stdout);
+            // }
 
-                        }
+            // close(fifo_c);
 
-                        printf("pid: %d \n \n",pid);
-                        close(fifo_c);
-                        // exit(1);
-                        post_semaphore(semid);
+            post_semaphore(semid);
 
-                        printf("sem pos post: %d \n",semid);
+            wait_semaphore(semid);
 
-                        wait_semaphore(semid);
-                        printf("sem 2 wait: %d \n",semid);
+            signal(SIGHUP,clientSend);
 
-                        printf("\x1b[32m%s\x1b[0m", "Salio hijo... \n \n");
-                        post_semaphore(semid);
-                    break;
-                    default:
-                        wait_semaphore(semid);
-                        printf("post sem father: %d \n",semid);
-                        printf("\x1b[36m%s\x1b[0m","Entro el padre... \n \n");
+            post_semaphore(semid);
 
-                        if(status[0] == 1){
-                            int a[2];
-                            a[0] = 2;
-                            write(fifo_status,a, sizeof(a));
-                            printf("\x1b[34m%s\x1b[0m", "Ha ingresado un jugador \n \n");
-                            printf("\x1b[32m%s\x1b[0m", "Enviando mapa...\n\n");
-
-                            char mapa[] = "este es el mapa del primer player";
-                            write(fifo,mapa, sizeof(mapa));
-
-                            printf("\x1b[34m%s\x1b[0m", "El mapa fue enviado exitosamente al primer jugador! \n \n");
-                        }
-                        else if(status[0] == 2){
-                            printf("\x1b[34m%s\x1b[0m", "Ha ingresado el opnente \n \n");
-                            printf("\x1b[32m%s\x1b[0m", "Enviando mapa...\n\n");
-
-                            char mapa[] = "este es el mapa del oponente";
-                            write(fifo,mapa, sizeof(mapa));
-
-                            printf("\x1b[34m%s\x1b[0m", "El mapa fue enviado exitosamente al segundo jugador! \n \n");
-                        }
-
-                        printf("ppid: %d \n \n",pid);
-                        post_semaphore(semid);
-                    break;
-
-                }
-            }
-
-
+            while(1);
         }
+        else{
+            wait_semaphore(semid);
+
+            printf("\x1b[34m%s\x1b[0m","Entro el padre del primer player... \n \n");
+
+            printf("parent --> pid = %d \n\n", getpid()); 
+
+            post_semaphore(semid);
+        }
+        
     }
 
-    //close(fifo);
+    if((s_len = read(fifo_status, status, sizeof(status))) > 0){
+
+        player2 = fork(); 
+        if (player2 == 0) { 
+            wait_semaphore(semid);
+
+            printf("\x1b[36m%s\x1b[0m", "Ha ingresado el oponente \n \n");
+
+            printf("child[2] --> pid = %d and ppid = %d\n\n", getpid(), getppid()); 
+
+            printf("\x1b[32m%s\x1b[0m", "Enviando mapa del segundo jugador...\n\n");
+
+            char mapa[] = "este es el mapa del oponente";
+            write(fifo,mapa, sizeof(mapa));
+
+            printf("\x1b[34m%s\x1b[0m", "El mapa fue enviado exitosamente al segundo jugador! \n \n");
+
+            // if(( n = read(fifo_c,buf,sizeof(buf)))>0){
+            //     wait_semaphore(semid);
+            //     write(1,buf,n); // Escribe por pantalla los almacenado en buf (escribe n bytes).
+            //     fflush(stdout);
+            //     post_semaphore(semid);
+            // }
+
+            // close(fifo_c);
+
+            post_semaphore(semid);
+
+            kill(player1,SIGHUP); 
+        } 
+        else {  
+            wait_semaphore(semid);
+
+            printf("\x1b[34m%s\x1b[0m","Entro el padre del segundo player... \n \n");
+
+            printf("parent --> pid = %d \n\n", getpid()); 
+
+            post_semaphore(semid);
+
+            wait_semaphore(semid);
+            printf("\x1b[34m%s\x1b[0m","fuera semaforo padre... \n \n");
+            //signal(SIGHUP,clientSend);
+            signal(SIGALRM,serverSend);
+            post_semaphore(semid);
+
+            while(1);
+        } 
+    }
+
     close(fifo_c);
     close(fifo);
     close(fifo_status);
     exit(0);
-
-}
+  
+    return 0; 
+} 
