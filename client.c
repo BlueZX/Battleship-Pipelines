@@ -36,10 +36,10 @@ int main (void){
 		exit(1);
 	}
 
-	if((fifo_c = open(FIFONAME_C,O_RDWR))<0){ // Se abre el archivo FIFO con permisos de lectura y escritura. Se guarda su descriptor de archivo (fd)
-		perror("open c"); // Si falla, error
-		exit(1);
-	}
+	// if((fifo_c = open(FIFONAME_C,O_RDWR))<0){ // Se abre el archivo FIFO con permisos de lectura y escritura. Se guarda su descriptor de archivo (fd)
+	// 	perror("open c"); // Si falla, error
+	// 	exit(1);
+	// }
 
     printf("xd %d", status[0]);
     status[0] = 1;
@@ -63,36 +63,46 @@ int main (void){
     // }
     
 
-
-
-    while(1){
-
-        printf("---------- envio mensaje por defecto ------------ \n\n");
+    printf("---------- envio mensaje por defecto ------------ \n\n");
         // if((s = read(fifo_status,estado,sizeof(estado))) > 0){ // Lee desde teclado el mensaje que se quiere enviar al servidor.
         // //write(1,estado,s); // Si se recibe más de 0 bytes, se escribe en la tuberia (fd) lo almacenado en buf con n bytes
         //     printf("estado: %d", estado[0]);
         //     fflush(stdout);    
         // }
-        write(fifo_status,status,sizeof(status));
+    write(fifo_status,status,sizeof(status));
 
-        fflush(stdout);
+    fflush(stdout);
+
+    close(fifo_status);
+
+    while(1){
+
         
-        if((ser=read(fd,buf_s,sizeof(buf_s))) > 0){ // Lee desde teclado el mensaje que se quiere enviar al servidor.
+        if((ser = read(fd,buf_s,sizeof(buf_s))) > 0){ // Lee desde teclado el mensaje que se quiere enviar al servidor.
             write(1,buf_s,ser); // Si se recibe más de 0 bytes, se escribe en la tuberia (fd) lo almacenado en buf con n bytes
             printf("\n");
             fflush(stdout);
 
-            while((n=read(0,buf,sizeof(buf)))>0){ // Lee desde teclado el mensaje que se quiere enviar al servidor.
-                write(fifo_c,buf,n); // Si se recibe más de 0 bytes, se escribe en la tuberia (fd) lo almacenado en buf con n bytes
-                fflush(stdout);
+            printf("leo \n \n");
+
+            if((fifo_c = open(FIFONAME_C,O_RDWR))<0){ // Se abre el archivo FIFO con permisos de lectura y escritura. Se guarda su descriptor de archivo (fd)
+                perror("open c"); // Si falla, error
+                exit(1);
             }
         }
 
+        if((n=read(0,buf,sizeof(buf)))>0){ // Lee desde teclado el mensaje que se quiere enviar al servidor.
+            write(fifo_c,buf,n); // Si se recibe más de 0 bytes, se escribe en la tuberia (fd) lo almacenado en buf con n bytes
+            fflush(stdout);
+
+            printf("escribo \n \n");
+        }
+        
+
+       close(fifo_c);
 
     }
 
-    close(fifo_c);
 	close(fd);
-    close(fifo_status);
 	exit(0);
 }

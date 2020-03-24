@@ -17,6 +17,26 @@
 #define FIFONAME_C "client_to_server"
 
 
+//Tipos de puntos en el mapa
+#define WATER 0
+#define MISS 1
+#define HIT 2
+#define SHIP 3
+
+// Symbolos
+#define WATER_SYMBOL ~
+#define MISS_SYMBOL ~
+#define HIT_SYMBOL X
+#define SHIP_SYMBOL B
+
+typedef struct map{
+    int width;
+    int height;
+    int **map;
+    int ships[5];
+    int total;
+} Map;
+
 struct sembuf p = {0, -1, SEM_UNDO}; // Estrutura que define la operación atomica sem_wait(). 0 significa que se va a operar en el indice 0 del arreglo
 									 // de semáforos. -1 significa que se va a disminuir el contador del semáforo, SEM_UNDO significa que la operación
 									 // aplicada será mientras viva el proceso, es decir, si el proceso muere antes de liberar el recurso o sección
@@ -38,6 +58,104 @@ void welcome(){
     printf("\x1b[33m%s\x1b[0m", "|                                           | |                                       |\n");
     printf("\x1b[33m%s\x1b[0m", "|                                           |_|                                       |\n");
     printf("\x1b[33m%s\x1b[0m", "|_____________________________________________________________________________________|\n\n");
+}
+
+Map *iniciarMapa(){
+    Map *m = malloc(sizeof(Map));
+    int i, j;
+
+    m->width = 5;
+    m->height = 5;
+
+    m->map = malloc(m->width * sizeof(int *));
+
+    for(i=0; i<m->width; i++){
+        m->map[i] = malloc(m->height * sizeof(int));
+        for(j=0; j<m->height; j++)
+            m->map[i][j] = 0;
+    }
+
+    m->ships[0] = 1;
+    m->ships[1] = 1;
+    m->ships[2] = 1;
+    m->ships[3] = 1;
+    m->ships[4] = 1;
+
+    return m;
+}
+
+void colocarMapa(Map *m){
+    int a = 0;
+    int n = 5;
+
+    time_t t;
+
+    srand((unsigned) time(&t));
+
+    int i = rand() % m->height;
+    int j = rand() % m->width;
+
+    while(a < 5){
+
+        if(m->map[i][j] == 3){
+            i = rand() % m->height;
+            j = rand() % m->width;
+        
+        }
+        else{
+            m->map[i][j] = 3;
+            a++;
+        }
+
+    }
+
+}
+
+void verMapa(Map *m){
+    int i, j;
+
+    printf(" y\\x ");
+    for (i=0; i<m->height; i++)
+        if (i<10)
+            printf("%i  ", i);
+        else
+            printf("%i ", i);
+
+    printf("\n");
+
+    for (i=0; i<m->width; i++)
+    {
+        // Print letter
+        if (i<10)
+            printf("  %i", i);
+        else
+            printf(" %i", i);
+
+        for (j=0; j<m->height; j++)
+        {
+            switch(m->map[i][j])
+            {
+                case WATER:
+                    printf("\x1b[36m%s\x1b[0m","  ~");
+                    break;
+                case MISS:
+                    printf("\x1b[31m%s\x1b[0m","  ~");
+                    break;
+                case SHIP:
+                    printf("\x1b[32m%s\x1b[0m","  B");
+                    break;
+                case HIT:
+                    printf("\x1b[31m%s\x1b[0m","  X");
+                    break;
+                default:
+                    printf("  ?");
+                    break;
+            }
+
+        }
+        printf("\n");
+    }
+    printf("\n");
 }
 
 
@@ -79,7 +197,7 @@ void clientSend(){
 
 void serverSend(){
     int fifo;
-    char buf[1024];
+    // char buf[1024];
 
     fifo = open(FIFONAME_S,O_RDWR);
 
@@ -87,6 +205,8 @@ void serverSend(){
 		perror("open"); // Si falla, error
 		exit(1);
 	}
+
+    char buf[] = "espere a que el oponente haga su jugada...";
 
     write(fifo,buf,sizeof(buf));
     fflush(stdout);
@@ -171,6 +291,10 @@ int main()
         perror("semctl"); exit(1); // Si falla, retorna un valor negativo.
     }
 
+    Map *m1 = iniciarMapa();
+    Map *m2 = iniciarMapa();
+
+
     printf("\x1b[32m%s\x1b[0m", "Esperando a los jugadores...\n\n");
 
     if((s_len = read(fifo_status, status, sizeof(status))) > 0){
@@ -185,6 +309,8 @@ int main()
             printf("\x1b[32m%s\x1b[0m", "Enviando mapa del primer jugador...\n\n");
 
             char mapa[] = "este es el mapa del primer player";
+            colocarMapa(m1);
+            verMapa(m1);
                             
             write(fifo,mapa, sizeof(mapa));
 
@@ -256,13 +382,15 @@ int main()
 
             printf("parent --> pid = %d \n\n", getpid()); 
 
+            signal(SIGALRM,serverSend);
+
             post_semaphore(semid);
 
-            wait_semaphore(semid);
-            printf("\x1b[34m%s\x1b[0m","fuera semaforo padre... \n \n");
-            //signal(SIGHUP,clientSend);
-            signal(SIGALRM,serverSend);
-            post_semaphore(semid);
+            // // wait_semaphore(semid);
+            // printf("\x1b[34m%s\x1b[0m","fuera semaforo padre... \n \n");
+            // //signal(SIGHUP,clientSend);
+            // signal(SIGALRM,serverSend);
+            // // post_semaphore(semid);
 
             while(1);
         } 
