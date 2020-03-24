@@ -1,13 +1,71 @@
+// BattleShip name pipelines
+// Integrantes: Iván Castro Duran, Alejandro Figueroa
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
+
 #define FIFONAME_S "server_to_client"
 #define FIFONAME_STATUS "status"
 #define FIFONAME_ESTADO "estado"
 #define FIFONAME_C "client_to_server"
+
+//Tipos de puntos en el mapa
+#define WATER 0
+#define MISS 1
+#define HIT 2
+#define SHIP 3
+
+void verMapa(int mapa[]){
+    int i, j;
+
+    printf(" y\\x ");
+    for (i=0; i < 5; i++)
+        if (i<10)
+            printf("%i  ", i);
+        else
+            printf("%i ", i);
+
+    printf("\n");
+
+    for(i=0; i < 30; i++){
+        if(i == 0){
+            printf("  %i", i);
+        }
+
+        if(mapa[i] == -1){
+            printf("\n");
+            if(i / 5 < 5){
+                printf("  %d", i / 5);
+            }
+        }
+        else{
+            switch(mapa[i]){
+                case WATER:
+                    printf("\x1b[36m%s\x1b[0m","  ~");
+                break;    
+                case MISS:
+                    printf("\x1b[31m%s\x1b[0m","  ~");
+                break;
+                case SHIP:
+                    printf("\x1b[32m%s\x1b[0m","  B");
+                break;
+                case HIT:
+                    printf("\x1b[31m%s\x1b[0m","  X");
+                break;
+                default:
+                    printf("  ?");
+                break;
+            }
+        }
+    }
+
+    printf("\n");
+
+}
 
 int main (void){
 
@@ -26,8 +84,9 @@ int main (void){
     printf("\x1b[33m%s\x1b[0m", "|___________________________________________________|\n\n");
 
 	int n,fd, fifo_c, fifo_status, fifo_estado,ser, s;
-	char buf[1024]; // Cadena de char usado para guardar lo que se escribe en el cliente.
-	char buf_s[1024]; // Cadena de char usado para guardar lo que se escribe en el cliente.
+	char buf[1024]; 
+	char buf_s[1024]; 
+    int mapa[30];
 
     int status[2], estado[2];
 
@@ -63,7 +122,7 @@ int main (void){
     // }
     
 
-    printf("---------- envio mensaje por defecto ------------ \n\n");
+    printf("---------- envio mensaje de conexion ------------ \n\n");
         // if((s = read(fifo_status,estado,sizeof(estado))) > 0){ // Lee desde teclado el mensaje que se quiere enviar al servidor.
         // //write(1,estado,s); // Si se recibe más de 0 bytes, se escribe en la tuberia (fd) lo almacenado en buf con n bytes
         //     printf("estado: %d", estado[0]);
@@ -78,8 +137,15 @@ int main (void){
     while(1){
 
         
-        if((ser = read(fd,buf_s,sizeof(buf_s))) > 0){ // Lee desde teclado el mensaje que se quiere enviar al servidor.
-            write(1,buf_s,ser); // Si se recibe más de 0 bytes, se escribe en la tuberia (fd) lo almacenado en buf con n bytes
+        if((ser = read(fd,mapa,sizeof(mapa))) > 0){ 
+            //write(1,mapa,ser);
+            printf("Mapa \n\n");
+            //for(int i=0; i < 30; i++){
+                //printf(" %d ", mapa[i]);
+            //}
+            verMapa(mapa);
+
+
             printf("\n");
             fflush(stdout);
 

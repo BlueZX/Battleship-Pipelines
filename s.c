@@ -1,3 +1,8 @@
+// BattleShip name pipelines
+// Integrantes: Iván Castro Duran, Alejandro Figueroa
+
+
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -23,26 +28,15 @@
 #define HIT 2
 #define SHIP 3
 
-// Symbolos
-#define WATER_SYMBOL ~
-#define MISS_SYMBOL ~
-#define HIT_SYMBOL X
-#define SHIP_SYMBOL B
-
 typedef struct map{
     int width;
     int height;
     int **map;
-    int ships[5];
     int total;
 } Map;
 
-struct sembuf p = {0, -1, SEM_UNDO}; // Estrutura que define la operación atomica sem_wait(). 0 significa que se va a operar en el indice 0 del arreglo
-									 // de semáforos. -1 significa que se va a disminuir el contador del semáforo, SEM_UNDO significa que la operación
-									 // aplicada será mientras viva el proceso, es decir, si el proceso muere antes de liberar el recurso o sección
-									 // critica, automáticamente se liberar dicho recurso, esto para evitar deadlock (Ver clase 7)
-struct sembuf v = {0, 1, SEM_UNDO}; // Estructura que define la operación atomica sem_post(). Mismo caso que la operación anterior, con la diferencia
-									// que 1 significa que se va a aumentar el contador del semáforo.
+struct sembuf p = {0, -1, SEM_UNDO}; // Estrutura que define la operación atomica sem_wait().
+struct sembuf v = {0, 1, SEM_UNDO}; // Estructura que define la operación atomica sem_post().
 
 
 void welcome(){
@@ -60,6 +54,7 @@ void welcome(){
     printf("\x1b[33m%s\x1b[0m", "|_____________________________________________________________________________________|\n\n");
 }
 
+//generamos el mapa
 Map *iniciarMapa(){
     Map *m = malloc(sizeof(Map));
     int i, j;
@@ -75,15 +70,10 @@ Map *iniciarMapa(){
             m->map[i][j] = 0;
     }
 
-    m->ships[0] = 1;
-    m->ships[1] = 1;
-    m->ships[2] = 1;
-    m->ships[3] = 1;
-    m->ships[4] = 1;
-
     return m;
 }
 
+// se pone los barcos en el mapa
 void colocarMapa(Map *m){
     int a = 0;
     int n = 5;
@@ -111,6 +101,7 @@ void colocarMapa(Map *m){
 
 }
 
+//mostrar el mapa en la pantalla
 void verMapa(Map *m){
     int i, j;
 
@@ -125,7 +116,6 @@ void verMapa(Map *m){
 
     for (i=0; i<m->width; i++)
     {
-        // Print letter
         if (i<10)
             printf("  %i", i);
         else
@@ -157,7 +147,6 @@ void verMapa(Map *m){
     }
     printf("\n");
 }
-
 
 void wait_semaphore(int semid){
     if(semop(semid, &p, 1) < 0) { // semop realiza una operación sobre un arreglo de semaforos. Recibe la id del arreglo de semaforos,
@@ -197,7 +186,6 @@ void clientSend(){
 
 void serverSend(){
     int fifo;
-    // char buf[1024];
 
     fifo = open(FIFONAME_S,O_RDWR);
 
@@ -220,34 +208,33 @@ int main()
 
     int n,fifo,fifo_c, fifo_status, len, temp, s_len, fifo_estado;
     int semid;
-    //char buffer_s[1024];
-	char buf[1024]; // Cadena de char usado para guardar lo que se recibe desde el cliente.
+	char buf[1024]; 
     int status[2];
     int estado = 0;
 
     welcome();
 
-    unlink(FIFONAME_STATUS); // Elimina "myfifo" si existe.
-	unlink(FIFONAME_ESTADO); // Elimina "myfifo" si existe.
-	unlink(FIFONAME_S); // Elimina "myfifo" si existe.
-	unlink(FIFONAME_C); // Elimina "myfifo" si existe.
+    unlink(FIFONAME_STATUS); // Elimina "status" si existe.
+	unlink(FIFONAME_ESTADO); // Elimina "estado" si existe.
+	unlink(FIFONAME_S); // Elimina "server_to_client" si existe.
+	unlink(FIFONAME_C); // Elimina "client_to_server" si existe.
     
-	if(mkfifo(FIFONAME_S,666) < 0){ // Crea que archivo "myfifo" con permisos 666, si no existe lo crea.
+	if(mkfifo(FIFONAME_S,666) < 0){ // Crea que archivo "server_to_client" con permisos 666, si no existe lo crea.
 		perror("mkfifo"); // Si no se puede crear, imprime el error causado.
 		exit(1);
 	}
 
-	if(mkfifo(FIFONAME_STATUS,666) < 0){ // Crea que archivo "myfifo" con permisos 666, si no existe lo crea.
+	if(mkfifo(FIFONAME_STATUS,666) < 0){ // Crea que archivo "status" con permisos 666, si no existe lo crea.
 		perror("mkfifo"); // Si no se puede crear, imprime el error causado.
 		exit(1);
 	}
 
-	if(mkfifo(FIFONAME_ESTADO,666) < 0){ // Crea que archivo "myfifo" con permisos 666, si no existe lo crea.
+	if(mkfifo(FIFONAME_ESTADO,666) < 0){ // Crea que archivo "estado" con permisos 666, si no existe lo crea.
 		perror("mkfifo"); // Si no se puede crear, imprime el error causado.
 		exit(1);
 	}
 
-	if(mkfifo(FIFONAME_C,666) < 0){ // Crea que archivo "myfifo" con permisos 666, si no existe lo crea.
+	if(mkfifo(FIFONAME_C,666) < 0){ // Crea que archivo "client_to_server" con permisos 666, si no existe lo crea.
 		perror("mkfifo"); // Si no se puede crear, imprime el error causado.
 		exit(1);
 	}
@@ -262,11 +249,6 @@ int main()
 		exit(1);
 	}
 
-	// if(fifo_c < 0){ // Se abre el archivo FIFO con permisos de lectura y escritura. Se guarda su descriptor de archivo (fd)
-	// 	perror("open"); // Si falla, error
-	// 	exit(1);
-	// }
-
 	if(fifo_status < 0){ // Se abre el archivo FIFO con permisos de lectura y escritura. Se guarda su descriptor de archivo (fd)
 		perror("open"); // Si falla, error
 		exit(1);
@@ -277,17 +259,14 @@ int main()
 		exit(1);
 	}
 
-    semid = semget(IPC_PRIVATE, 1, 0666 | IPC_CREAT); // Obtiene la id de un arreglo de semáforos, el primero argumento de semget()
-													  // define la visibilidad del arreglo con respecto a otro procesos que distinta jerarquia, en
-													  // este caso, es privado, solo procesos de la misma jerarquia podrá visualizar el semáforo.
-													  // 1 significa la dimensión del arreglo que semáforos
-													  // El ultimo parametro da los permisos.
+    semid = semget(IPC_PRIVATE, 1, 0666 | IPC_CREAT); 
     
     if(semid < 0) { // Si no se pudo crear el arreglo, retorna un valor negativo
         perror("semget"); exit(1);
     }
     if(semctl(semid, 0, SETVAL, 1) < 0) { // semctl inicializa un semaforo, para un arreglo de semaforos (semid), en su posición 0, se va a inicializar
 										  // el valor del contador (SETVAL) el valor 1.
+
         perror("semctl"); exit(1); // Si falla, retorna un valor negativo.
     }
 
@@ -296,6 +275,8 @@ int main()
 
 
     printf("\x1b[32m%s\x1b[0m", "Esperando a los jugadores...\n\n");
+
+    //si el cliente se conecto enviando un estado, genera un hijo
 
     if((s_len = read(fifo_status, status, sizeof(status))) > 0){
         player1 = fork(); 
@@ -308,20 +289,27 @@ int main()
 
             printf("\x1b[32m%s\x1b[0m", "Enviando mapa del primer jugador...\n\n");
 
-            char mapa[] = "este es el mapa del primer player";
             colocarMapa(m1);
+
+            //se genera el mapa como un arreglo de numeros donde -1 significa salto de linea
+            int i, j, k;
+            int mapa[30];
+            k = 0;
+
+            for(i=0; i<m1->width; i++){
+                for(j=0; j<m1->height; j++){
+                    mapa[k] = m1->map[i][j];
+                    k++;
+                }
+                mapa[k] = -1;
+                k++;
+            }
+
             verMapa(m1);
-                            
+
             write(fifo,mapa, sizeof(mapa));
 
             printf("\x1b[34m%s\x1b[0m", "El mapa fue enviado exitosamente al primer jugador! \n \n");
-
-            // if(( n = read(fifo_c,buf,sizeof(buf)))>0){
-            //     write(1,buf,n); // Escribe por pantalla los almacenado en buf (escribe n bytes).
-            //     fflush(stdout);
-            // }
-
-            // close(fifo_c);
 
             post_semaphore(semid);
 
@@ -345,6 +333,8 @@ int main()
         
     }
 
+    //si se conecta otro cliente genera otro hijo
+
     if((s_len = read(fifo_status, status, sizeof(status))) > 0){
 
         player2 = fork(); 
@@ -357,19 +347,26 @@ int main()
 
             printf("\x1b[32m%s\x1b[0m", "Enviando mapa del segundo jugador...\n\n");
 
-            char mapa[] = "este es el mapa del oponente";
+            colocarMapa(m2);
+
+            //se genera el mapa como un arreglo de numeros donde -1 significa salto de linea
+            int i, j, k;
+            int mapa[30];
+            k = 0;
+
+            for(i=0; i<m2->width; i++){
+                for(j=0; j<m2->height; j++){
+                    mapa[k] = m2->map[i][j];
+                    k++;
+                }
+                mapa[k] = -1;
+                k++;
+            }
+
+            verMapa(m2);
             write(fifo,mapa, sizeof(mapa));
 
             printf("\x1b[34m%s\x1b[0m", "El mapa fue enviado exitosamente al segundo jugador! \n \n");
-
-            // if(( n = read(fifo_c,buf,sizeof(buf)))>0){
-            //     wait_semaphore(semid);
-            //     write(1,buf,n); // Escribe por pantalla los almacenado en buf (escribe n bytes).
-            //     fflush(stdout);
-            //     post_semaphore(semid);
-            // }
-
-            // close(fifo_c);
 
             post_semaphore(semid);
 
